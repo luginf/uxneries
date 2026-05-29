@@ -2,6 +2,7 @@
 |10 @Console [ &vector $2 &read $1 &pad $5 &write $1 &error $1 ]
 |20 @Screen [ &vector $2 &width $2 &height $2 &pad $2 &x $2 &y $2 &addr $2 &pixel $1 &sprite ]
 |80 @Controller [ &vector $2 &button $1 &key $1 ]
+|90 @Mouse [ &vector $2 &x $2 &y $2 &state $1 &pad $7 ]
 
 %INCREMENT { DUP DEI2 #000c ADD2 ROT DEO2 }
 %INC-X { .Screen/x DEI2 INC2 .Screen/x DEO2 }
@@ -54,6 +55,7 @@
 	;draw-player-cursor JSR2
 
 	;on-controller .Controller/vector DEO2
+	;on-mouse .Mouse/vector DEO2
 BRK
 
 @off-controller ( a nice little pun )
@@ -378,6 +380,76 @@ JMP2r
 	.Screen/x DEI2 SWP2 SUB2 .Screen/x DEO2
 JMP2r
 
+( gestion souris : survol met a jour le curseur, clic gauche place la piece )
+( coordonnees plateau : offset=29px, cellule=16px -> (px-29)/16+1 = colonne/ligne 1..3 )
+@on-mouse
+	( ignorer si la partie n'est pas en cours )
+	.Controller/vector DEI2 ;on-controller NEQ2 ;&done JCN2
+	( convertir x -> w ; si hors grille -> &outside )
+	.Mouse/x DEI2 NIP
+	DUP #1d LTH ,&outside JCN
+	DUP #4c GTH ,&outside JCN
+	#1d SUB #10 DIV INC ;mouse-cell-w STA
+	( convertir y -> h ; si hors grille -> &outside )
+	.Mouse/y DEI2 NIP
+	DUP #1d LTH ,&outside JCN
+	DUP #4c GTH ,&outside JCN
+	#1d SUB #10 DIV INC ;mouse-cell-h STA
+	( dans la grille : mettre a jour le curseur si la cellule a change )
+	#01 ;mouse-over-board STA
+	;mouse-cell-w LDA ;game/cursor-pos-w LDA NEQ
+	;mouse-cell-h LDA ;game/cursor-pos-h LDA NEQ ORA
+	,&hover-update JCN
+	,&hover-done JMP
+	&outside POP #00 ;mouse-over-board STA ,&hover-done JMP
+	&hover-update
+		;mouse-cell-w LDA ;game/cursor-pos-w STA
+		;mouse-cell-h LDA ;game/cursor-pos-h STA
+		;clear-cursors JSR2
+		;draw-player-cursor JSR2
+	&hover-done
+	( ignorer si hors grille ou pas de front montant )
+	;mouse-over-board LDA #00 EQU ;&done JCN2
+	.Mouse/state DEI #01 AND
+	;mouse-last-state LDA
+	OVR ;mouse-last-state STA
+	EQU ;&done JCN2
+	;mouse-last-state LDA #00 EQU ;&done JCN2
+	( poser la piece )
+	;hw-to-addr JSR2 LDA ;&done JCN2
+	;place-figure JSR2
+	;wincon JSR2 DUP #00 EQU ,&no-x-win JCN
+	;off-controller .Controller/vector DEO2
+	#04 ;game/cursor-pos-h STA
+	#02 ;game/cursor-pos-w STA
+	;place-figure JSR2
+	BRK
+	&no-x-win
+		POP
+		;board-full JSR2 ,&tie JCN
+		;ai-move JSR2
+		;wincon JSR2 DUP #00 EQU ,&no-o-win JCN
+		;off-controller .Controller/vector DEO2
+		#04 ;game/cursor-pos-h STA
+		#02 ;game/cursor-pos-w STA
+		;place-figure JSR2
+		BRK
+		&no-o-win
+			POP
+			;board-full JSR2 ,&tie JCN
+			LIT "x ;game/cur-player STA
+			;clear-cursors JSR2
+			;draw-player-cursor JSR2
+			BRK
+	&tie
+		;off-controller .Controller/vector DEO2
+		#04 ;game/cursor-pos-h STA
+		#02 ;game/cursor-pos-w STA
+		LIT "s ;game/cur-player STA
+		;place-figure JSR2
+	&done
+BRK
+
 ( ai: verifie si les cellules aux indices i1 et i2 contiennent ai-target et que ie est vide )
 ( retourne 1 si trouvé et stocke la position dans ai-move-h/w )
 @ai-check-perm ( -- found? )
@@ -505,6 +577,9 @@ JMP2r
 @ai-move-h 00 @ai-move-w 00
 @ai-found 00
 @ai-save-h 00 @ai-save-w 00
+@mouse-last-state 00
+@mouse-cell-w 00 @mouse-cell-h 00
+@mouse-over-board 00
 
 (
 SPRITES BE HERE
