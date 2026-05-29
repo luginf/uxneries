@@ -1,0 +1,399 @@
+|00 @System [ &vector $2 &pad $6 &r $2 &g $2 &b $2 ]
+|10 @Console [ &vector $2 &read $1 &pad $5 &write $1 &error $1 ]
+|20 @Screen [ &vector $2 &width $2 &height $2 &pad $2 &x $2 &y $2 &addr $2 &pixel $1 &sprite ]
+|80 @Controller [ &vector $2 &button $1 &key $1 ]
+
+%INCREMENT { DUP DEI2 #000c ADD2 ROT DEO2 }
+%INC-X { .Screen/x DEI2 INC2 .Screen/x DEO2 }
+%INC-Y { .Screen/y DEI2 INC2 .Screen/y DEO2 }
+%HEIGHT { #30 }
+%WIDTH { HEIGHT }
+%GAMEBOARD-OFFSET2 { #001d }
+%CELL-SIDE { #10 } ( first pixel: border )
+%HW-TO-BORDER-PX {
+	#01 SUB CELL-SIDE MUL #00 SWP GAMEBOARD-OFFSET2 ADD2
+}
+%HW-TO-PX-FOR-XO {
+	HW-TO-BORDER-PX #0005 ADD2
+}
+
+%debug { #01 #0e DEO }
+|0100
+	( gfx thingies )
+	#e9d1 .System/r DEO2
+	#e911 .System/g DEO2
+	#e91d .System/b DEO2
+
+	#001d .Screen/x DEO2
+	#001d .Screen/y DEO2
+	#006b .Screen/width DEO2
+	#006b .Screen/height DEO2
+	( draw the board )
+	#01 HW-TO-BORDER-PX .Screen/x DEO2
+		#01 HW-TO-BORDER-PX .Screen/y DEO2
+			;draw-hline JSR2
+		#02 HW-TO-BORDER-PX .Screen/y DEO2
+			;draw-hline JSR2
+		#03 HW-TO-BORDER-PX .Screen/y DEO2
+			;draw-hline JSR2
+		#04 HW-TO-BORDER-PX .Screen/y DEO2
+			;draw-hline JSR2
+	#01 HW-TO-BORDER-PX .Screen/y DEO2
+		#01 HW-TO-BORDER-PX .Screen/x DEO2
+			;draw-vline JSR2
+		#02 HW-TO-BORDER-PX .Screen/x DEO2
+			;draw-vline JSR2
+		#03 HW-TO-BORDER-PX .Screen/x DEO2
+			;draw-vline JSR2
+		#04 HW-TO-BORDER-PX .Screen/x DEO2
+			;draw-vline JSR2
+	#04 HW-TO-BORDER-PX .Screen/x DEO2
+	#04 HW-TO-BORDER-PX .Screen/y DEO2
+	#01 .Screen/pixel DEO
+
+	;draw-player-cursor JSR2
+
+	;on-controller .Controller/vector DEO2
+BRK
+
+@off-controller ( a nice little pun )
+	LIT "f ;game/cur-player STA
+	#0101 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+	;place-figure JSR2
+	#0102 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+	;place-figure JSR2
+	#0103 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+	;place-figure JSR2
+	#0201 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+	;place-figure JSR2
+	#0202 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+	;place-figure JSR2
+	#0203 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+	;place-figure JSR2
+	#0301 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+	;place-figure JSR2
+	#0302 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+	;place-figure JSR2
+	#0303 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+	;place-figure JSR2
+	#0402 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+	;place-figure JSR2
+
+	;on-controller .Controller/vector DEO2
+	LIT "x ;game/cur-player STA
+	#0202 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+	#0000 #0000 #0000 #0000 #00
+	;board/cell11 STA ;board/cell12 STA ;board/cell13 STA
+	;board/cell21 STA ;board/cell22 STA ;board/cell23 STA
+	;board/cell31 STA ;board/cell32 STA ;board/cell33 STA
+	;clear-cursors JSR2
+	;draw-player-cursor JSR2
+	#8244 ;x STA2 ( When someone wins, x's sprite gets overwritten due to place-figure being too universal (should be split in two). Instead of having a proper refactoring, I am just making this dirty hack. I am not sorry. )
+BRK
+
+@on-controller
+	.Controller/button DEI
+	DUP #10 ( up ) EQU ;&up-branch JCN2
+	DUP #20 ( down ) EQU ;&down-branch JCN2
+	DUP #40 ( left ) EQU ;&left-branch JCN2
+	DUP #80 ( right ) EQU ;&right-branch JCN2
+	#01 ( A / Ctrl ) EQU ,&a-branch JCN
+	.Controller/key DEI
+	#20 ( space ) EQU ,&a-branch JCN
+	BRK
+	&a-branch
+		;hw-to-addr JSR2 LDA ,&end-a-branch JCN
+		;place-figure JSR2
+		;swap-player JSR2
+		;draw-player-cursor JSR2
+		;wincon JSR2 DUP #00 EQU ,&no-winner-branch JCN
+		;off-controller .Controller/vector DEO2
+		#04 ;game/cursor-pos-h STA
+		#02 ;game/cursor-pos-w STA
+		;swap-player JSR2
+		;place-figure JSR2
+		&end-a-branch
+			BRK
+		&no-winner-branch
+			POP
+			;board-full JSR2 ,&tie-branch JCN
+			BRK
+		&tie-branch
+			;off-controller .Controller/vector DEO2
+			#04 ;game/cursor-pos-h STA
+			#02 ;game/cursor-pos-w STA
+			LIT "s ;game/cur-player STA
+			;place-figure JSR2
+	BRK
+	&up-branch
+		;game/cursor-pos-h LDA
+		DUP #01 EQU ,&real-end JCN
+		#01 SUB ;game/cursor-pos-h STA
+	,&end JMP
+	&down-branch
+		;game/cursor-pos-h LDA
+		DUP #03 EQU ,&real-end JCN
+		#01 ADD ;game/cursor-pos-h STA
+	,&end JMP
+	&left-branch
+		;game/cursor-pos-w LDA
+		DUP #01 EQU ,&real-end JCN
+		#01 SUB ;game/cursor-pos-w STA
+	,&end JMP
+	&right-branch
+		;game/cursor-pos-w LDA
+		DUP #03 EQU ,&real-end JCN
+		#01 ADD ;game/cursor-pos-w STA
+	,&end JMP
+
+	&end
+		POP
+		;clear-cursors JSR2
+		;draw-player-cursor JSR2
+		,&final-end JMP
+	&real-end
+		POP2
+	&final-end
+BRK
+
+@three-same ( a b c -- bool )
+	DUP ( a b c c )
+	ROT ( a c c b )
+	EQU ( a c c=b )
+	ROT ROT ( c=b a c )
+	DUP ( c=b a c c )
+	ROT ( c=b c c a )
+	EQU ( c=b c a=c )
+	ROT ( c c=b a=c )
+	AND ( c a=b=c )
+	,&all-equal JCN
+		POP
+		#00
+		JMP2r
+	&all-equal
+JMP2r
+
+@board-full
+	;board/cell11 LDA #00 EQU ,&zero JCN
+	;board/cell21 LDA #00 EQU ,&zero JCN
+	;board/cell31 LDA #00 EQU ,&zero JCN
+	;board/cell12 LDA #00 EQU ,&zero JCN
+	;board/cell22 LDA #00 EQU ,&zero JCN
+	;board/cell32 LDA #00 EQU ,&zero JCN
+	;board/cell13 LDA #00 EQU ,&zero JCN
+	;board/cell23 LDA #00 EQU ,&zero JCN
+	;board/cell33 LDA #00 EQU ,&zero JCN
+	#01
+	JMP2r
+&zero
+	#00
+JMP2r
+
+%CHECK-WINCON {
+	DUP LIT "x EQU ;wincon-true JCN2
+	DUP LIT "o EQU ;wincon-true JCN2
+	POP
+}
+
+@wincon ( -- 00/x/o )
+	( horizontal wincons: )
+	;board/cell11 LDA ;board/cell21 LDA ;board/cell31 LDA ;three-same JSR2
+	CHECK-WINCON
+	;board/cell12 LDA ;board/cell22 LDA ;board/cell32 LDA ;three-same JSR2
+	CHECK-WINCON
+	;board/cell13 LDA ;board/cell23 LDA ;board/cell33 LDA ;three-same JSR2
+	CHECK-WINCON
+	( vertical wincons: )
+	;board/cell11 LDA ;board/cell12 LDA ;board/cell13 LDA ;three-same JSR2
+	CHECK-WINCON
+	;board/cell21 LDA ;board/cell22 LDA ;board/cell23 LDA ;three-same JSR2
+	CHECK-WINCON
+	;board/cell31 LDA ;board/cell32 LDA ;board/cell33 LDA ;three-same JSR2
+	CHECK-WINCON
+	( diagonal wincons: )
+	;board/cell11 LDA ;board/cell22 LDA ;board/cell33 LDA ;three-same JSR2
+	CHECK-WINCON
+	;board/cell31 LDA ;board/cell22 LDA ;board/cell13 LDA ;three-same JSR2
+	CHECK-WINCON
+	#00
+@wincon-true
+JMP2r
+
+@swap-player
+	( x <-> o )
+	;game/cur-player LDA
+	LIT "x EQU ,&x-branch JCN
+		LIT "x ;game/cur-player STA
+		JMP2r
+	&x-branch
+		LIT "o ;game/cur-player STA
+JMP2r
+
+@clear-cursors
+	#01 #01 ;draw-gray-cursor JSR2
+	#01 #02 ;draw-gray-cursor JSR2
+	#01 #03 ;draw-gray-cursor JSR2
+	#02 #01 ;draw-gray-cursor JSR2
+	#02 #02 ;draw-gray-cursor JSR2
+	#02 #03 ;draw-gray-cursor JSR2
+	#03 #01 ;draw-gray-cursor JSR2
+	#03 #02 ;draw-gray-cursor JSR2
+	#03 #03 ;draw-gray-cursor JSR2
+JMP2r
+
+@draw-colored-cursor-at ( color w h -- )
+	HW-TO-BORDER-PX #0001 ADD2 .Screen/y DEO2
+	HW-TO-BORDER-PX #0001 ADD2 .Screen/x DEO2
+	#00 ( iteration number )
+	&cond
+		( wst: color i )
+		DUP #0f EQU ,&next JCN
+		( #0f is the size of one side = CELL-SIDE #01 SUB )
+	&body
+		SWP DUP DUP ( wst: i color color color )
+		.Screen/pixel DEO
+		.Screen/y DEI2 #000e ADD2 .Screen/y DEO2
+		.Screen/pixel DEO
+		.Screen/y DEI2 #000e SUB2 .Screen/y DEO2
+		SWP ( wst: color i )
+		#01 ADD
+		.Screen/x DEI2 #0001 ADD2 .Screen/x DEO2
+		,&cond JMP
+	&next
+	POP
+	.Screen/y DEI2 INC2 .Screen/y DEO2
+	.Screen/x DEI2 #000f SUB2 .Screen/x DEO2
+	#00 ( iteration number )
+	&cond2
+		( wst: color i )
+		DUP #0d EQU ,&end JCN
+	&body2
+		SWP DUP DUP ( wst: i color color color )
+		.Screen/pixel DEO
+		.Screen/x DEI2 #000e ADD2 .Screen/x DEO2
+		.Screen/pixel DEO
+		.Screen/x DEI2 #000e SUB2 .Screen/x DEO2
+		SWP ( wst: color i )
+		#01 ADD
+		.Screen/y DEI2 #0001 ADD2 .Screen/y DEO2
+		,&cond2 JMP
+	&end
+	POP2
+JMP2r
+
+@draw-player-cursor ( -- )
+	( current-player == o ? #02 : #03 )
+	;game/cur-player LDA
+	LIT "o EQU ,&oBranch JCN
+		#03 ,&next JMP
+	&oBranch
+		#02
+	&next
+	;game/cursor-pos-w LDA
+	;game/cursor-pos-h LDA
+	( wst: color w h ) ;draw-colored-cursor-at JSR2
+JMP2r
+
+@draw-gray-cursor ( w h -- )
+	#00 ROT ROT
+	( wst: color w h ) ;draw-colored-cursor-at JSR2
+JMP2r
+
+( offsets  h       w
+  0 1 2    1 1 1   1 2 3
+  3 4 5    2 2 2   1 2 3
+  6 7 8    3 3 3   1 2 3
+  offset = (h - 1) * 3 + (w - 1)
+)
+@hw-to-addr ( -- addr* )
+	;board
+	;game/cursor-pos-h LDA #01 SUB #03 MUL
+	;game/cursor-pos-w LDA #01 SUB
+	ADD #00 SWP ADD2
+JMP2r
+
+@place-figure ( -- )
+	( get hw, convert to pixels, save to screen )
+	;game/cursor-pos-h LDA HW-TO-PX-FOR-XO .Screen/y DEO2
+	;game/cursor-pos-w LDA HW-TO-PX-FOR-XO .Screen/x DEO2
+
+	;game/cur-player LDA
+	DUP LIT "x EQU ,&x-branch JCN
+	DUP LIT "o EQU ,&o-branch JCN
+	LIT "f EQU ,&fill-branch JCN
+		;sad .Screen/addr DEO2
+		#01 .Screen/sprite DEO
+		JMP2r
+	&fill-branch
+		;fill .Screen/addr DEO2
+		#00 .Screen/sprite DEO
+	JMP2r
+	&o-branch
+		POP
+		;o .Screen/addr DEO2
+		#02 .Screen/sprite DEO
+		LIT "o ;hw-to-addr JSR2 STA
+	JMP2r
+	&x-branch
+		POP
+		;x .Screen/addr DEO2
+		#03 .Screen/sprite DEO
+		LIT "x ;hw-to-addr JSR2 STA
+JMP2r
+
+( draw-h/vline draws a line at stored x/y of color #01 with length = HEIGHT )
+@draw-vline ( -- )
+	#00
+	&vloop
+		DUP HEIGHT EQU ,&end JCN
+		INC
+		#01 .Screen/pixel DEO
+		INC-Y
+		,&vloop JMP
+	&end
+	#00 SWP
+	.Screen/y DEI2 SWP2 SUB2 .Screen/y DEO2
+JMP2r
+
+@draw-hline ( -- )
+	#00
+	&hloop
+		DUP WIDTH EQU ,&end JCN
+		INC
+		#01 .Screen/pixel DEO
+		INC-X
+		,&hloop JMP
+	&end
+	#00 SWP
+	.Screen/x DEI2 SWP2 SUB2 .Screen/x DEO2
+JMP2r
+
+( variables )
+@game [
+	&x-score 00 &o-score 00
+	&cur-player "x
+	&cursor-pos-w 02 &cursor-pos-h 02
+]
+@board [
+	&cell11 00 &cell21 00 &cell31 00
+	&cell12 00 &cell22 00 &cell32 00
+	&cell13 00 &cell23 00 &cell33 00
+]
+
+(
+SPRITES BE HERE
+# . . . . . # . | 82    . . # # # . . . | 38    . # . . . # . . | 44
+. # . . . # . . | 44    . # . . . # . . | 44    . # . . . # . . | 44
+. . # . # . . . | 28    # . . . . . # . | 82    . # . . . # . . | 44
+. . . # . . . . | 10    # . . . . . # . | 82    . . . . . . . . | 00
+. . # . # . . . | 28    # . . . . . # . | 82    . # # # # # . . | 7c
+. # . . . # . . | 44    . # . . . # . . | 44    # . . . . . # . | 82
+# . . . . . # . | 82    . . # # # . . . | 38    # . . . . . # . | 82
+. . . . . . . . | 00    . . . . . . . . | 00    . . . . . . . . | 00
+)
+@x        8244 2810 2844 8200
+@o        3844 8282 8244 3800
+@sad      4444 4400 7c82 8200
+@sad-old  2828 2800 3844 4400
+@fill     ffff ffff ffff ffff
+
