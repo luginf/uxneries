@@ -7,7 +7,8 @@ Environnement de développement pour la plateforme [Varvara/Uxn](https://wiki.xx
 | Fichier | Description |
 |---|---|
 | `uxn11` | VM graphique (X11), compilée depuis [`~rabbits/uxn11`](https://git.sr.ht/~rabbits/uxn11) |
-| `uxn2` | VM graphique (SDL2), compilée depuis [`~rabbits/uxn2`](https://git.sr.ht/~rabbits/uxn2) |
+| `uxn2` | VM graphique (SDL2), source locale dans `src/uxn2.c` (fork de [`~rabbits/uxn2`](https://git.sr.ht/~rabbits/uxn2)) |
+| `src/uxn2.c` | Source modifiée de uxn2 : options `-2x` / `-3x` pour zoom au démarrage |
 | `uxncli` | VM headless (terminal), compilée depuis [`~rabbits/uxncli`](https://git.sr.ht/~rabbits/uxncli) |
 | `drifblim.rom` | Assembleur pour uxn11/uxn2 (fichiers en entrée/sortie) |
 | `drifloon.rom` | Assembleur pour uxncli (stdin/stdout) |
@@ -41,8 +42,15 @@ cat source.tal | ./uxncli drifloon.rom > output.rom
 ## Lancer un ROM
 
 ```sh
-./uxn11 output.rom
+./uxn11 output.rom          # zoom ×1 (défaut)
+./uxn2 output.rom           # zoom ×1 (défaut)
+./uxn2 -2x output.rom       # zoom ×2
+./uxn2 -3x output.rom       # zoom ×3
 ```
+
+F1 pendant l'exécution cycle entre ×1 / ×2 / ×3.
+
+**Mécanisme zoom uxn2** : les options `-2x`/`-3x` simulent 1 ou 2 appuis F1 juste après `emu_init()`. SDL2 ne corrige pas automatiquement les coordonnées souris avec `SDL_RenderSetLogicalSize` — ce mécanisme contourne le problème.
 
 ## Recompiler les VM
 
@@ -50,7 +58,7 @@ cat source.tal | ./uxncli drifloon.rom > output.rom
 # uxn11 (nécessite libX11-dev)
 cc -DNDEBUG -O2 -g0 -s src/uxn11.c -lX11 -lutil -o uxn11
 
-# uxn2 (nécessite libsdl2-dev)
+# uxn2 — source locale modifiée (nécessite libsdl2-dev)
 cc $(sdl2-config --cflags) -DNDEBUG -O2 -g0 -s src/uxn2.c -o uxn2 $(sdl2-config --libs)
 
 # uxncli

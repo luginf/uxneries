@@ -16,7 +16,10 @@ cat mon_prog.tal | ./uxncli drifloon.rom > mon_prog.rom
 ## Lancer un ROM
 
 ```sh
-./uxn11 mon_prog.rom
+./uxn11 mon_prog.rom            # zoom ×1 fixe
+./uxn2 mon_prog.rom             # zoom ×1 (défaut)
+./uxn2 -2x mon_prog.rom         # zoom ×2
+./uxn2 -3x mon_prog.rom         # zoom ×3
 ```
 
 ## Assembler et lancer en une commande
@@ -58,7 +61,13 @@ cc -DNDEBUG -O2 -g0 -s src/uxn11.c -lX11 -lutil -o bin/uxn11
 
 ## Recompiler uxn2 depuis les sources
 
+La source locale `src/uxn2.c` est un fork de `~rabbits/uxn2` avec les options de zoom `-2x`/`-3x`.
+
 ```sh
+# Depuis la source locale (recommandé)
+cc $(sdl2-config --cflags) -DNDEBUG -O2 -g0 -s src/uxn2.c -o uxn2 $(sdl2-config --libs)
+
+# Depuis le dépôt upstream (sans les options de zoom)
 git clone https://git.sr.ht/~rabbits/uxn2
 cd uxn2
 cc $(sdl2-config --cflags) -DNDEBUG -O2 -g0 -s src/uxn2.c -o bin/uxn2 $(sdl2-config --libs)

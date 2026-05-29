@@ -23,6 +23,15 @@ Ou directement :
 ./uxn11 xo5.rom
 ```
 
+Avec `uxn2` (SDL2), le zoom est configurable :
+
+```sh
+./uxn2 -2x xo5.rom   # zoom ×2
+./uxn2 -3x xo5.rom   # zoom ×3
+```
+
+F1 pendant le jeu cycle entre ×1 / ×2 / ×3.
+
 ---
 
 ## Compiler depuis les sources
@@ -94,6 +103,8 @@ xo.rom          ROM compilée 3×3
 xo5.rom         ROM compilée 5×5
 Makefile
 uxn11           émulateur graphique (X11)
+uxn2            émulateur graphique (SDL2) — supporte -2x / -3x
+src/uxn2.c      source de uxn2 (fork local avec options zoom)
 uxncli          émulateur headless
 drifloon.rom    assembleur (stdin→stdout)
 drifblim.rom    assembleur (fichiers)
