@@ -1,0 +1,703 @@
+|00 @System [ &vector $2 &pad $6 &r $2 &g $2 &b $2 ]
+|10 @Console [ &vector $2 &read $1 &pad $5 &write $1 &error $1 ]
+|20 @Screen [ &vector $2 &width $2 &height $2 &pad $2 &x $2 &y $2 &addr $2 &pixel $1 &sprite ]
+|80 @Controller [ &vector $2 &button $1 &key $1 ]
+|90 @Mouse [ &vector $2 &x $2 &y $2 &state $1 &pad $7 ]
+
+%INC-X { .Screen/x DEI2 INC2 .Screen/x DEO2 }
+%INC-Y { .Screen/y DEI2 INC2 .Screen/y DEO2 }
+%HEIGHT { #50 }
+%WIDTH { HEIGHT }
+%GAMEBOARD-OFFSET2 { #0010 }
+%CELL-SIDE { #10 }
+%HW-TO-BORDER-PX {
+	#01 SUB CELL-SIDE MUL #00 SWP GAMEBOARD-OFFSET2 ADD2
+}
+%HW-TO-PX-FOR-XO {
+	HW-TO-BORDER-PX #0005 ADD2
+}
+
+|0100
+	#e9d1 .System/r DEO2
+	#e911 .System/g DEO2
+	#e91d .System/b DEO2
+
+	#0010 .Screen/x DEO2
+	#0010 .Screen/y DEO2
+	#0080 .Screen/width DEO2
+	#0080 .Screen/height DEO2
+
+	( grille 5x5 : 6 lignes horizontales et 6 verticales )
+	#01 HW-TO-BORDER-PX .Screen/x DEO2
+		#01 HW-TO-BORDER-PX .Screen/y DEO2 ;draw-hline JSR2
+		#02 HW-TO-BORDER-PX .Screen/y DEO2 ;draw-hline JSR2
+		#03 HW-TO-BORDER-PX .Screen/y DEO2 ;draw-hline JSR2
+		#04 HW-TO-BORDER-PX .Screen/y DEO2 ;draw-hline JSR2
+		#05 HW-TO-BORDER-PX .Screen/y DEO2 ;draw-hline JSR2
+		#06 HW-TO-BORDER-PX .Screen/y DEO2 ;draw-hline JSR2
+	#01 HW-TO-BORDER-PX .Screen/y DEO2
+		#01 HW-TO-BORDER-PX .Screen/x DEO2 ;draw-vline JSR2
+		#02 HW-TO-BORDER-PX .Screen/x DEO2 ;draw-vline JSR2
+		#03 HW-TO-BORDER-PX .Screen/x DEO2 ;draw-vline JSR2
+		#04 HW-TO-BORDER-PX .Screen/x DEO2 ;draw-vline JSR2
+		#05 HW-TO-BORDER-PX .Screen/x DEO2 ;draw-vline JSR2
+		#06 HW-TO-BORDER-PX .Screen/x DEO2 ;draw-vline JSR2
+	#06 HW-TO-BORDER-PX .Screen/x DEO2
+	#06 HW-TO-BORDER-PX .Screen/y DEO2
+	#01 .Screen/pixel DEO
+
+	;draw-player-cursor JSR2
+	;draw-restart-button JSR2
+
+	;on-controller .Controller/vector DEO2
+	;on-mouse .Mouse/vector DEO2
+BRK
+
+@off-controller
+	;reset-game JSR2
+BRK
+
+@on-controller
+	.Controller/button DEI
+	DUP #10 ( up )    EQU ;&up-branch JCN2
+	DUP #20 ( down )  EQU ;&down-branch JCN2
+	DUP #40 ( left )  EQU ;&left-branch JCN2
+	DUP #80 ( right ) EQU ;&right-branch JCN2
+	#01 ( A/Ctrl ) EQU ,&a-branch JCN
+	.Controller/key DEI
+	#20 ( space ) EQU ,&a-branch JCN
+	BRK
+	&a-branch
+		;hw-to-addr JSR2 LDA ,&end-a-branch JCN
+		;place-figure JSR2
+		;wincon JSR2 DUP #00 EQU ,&no-x-win JCN
+		;off-controller .Controller/vector DEO2
+		#0603 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+		;place-figure JSR2
+		&end-a-branch BRK
+		&no-x-win
+			POP
+			;board-full JSR2 ,&tie-branch JCN
+			;ai-move JSR2
+			;wincon JSR2 DUP #00 EQU ,&no-o-win JCN
+			;off-controller .Controller/vector DEO2
+			#0603 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+			;place-figure JSR2
+			BRK
+			&no-o-win
+				POP
+				;board-full JSR2 ,&tie-branch JCN
+				LIT "x ;game/cur-player STA
+				;clear-cursors JSR2
+				;draw-player-cursor JSR2
+				BRK
+		&tie-branch
+			;off-controller .Controller/vector DEO2
+			#0603 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+			LIT "s ;game/cur-player STA
+			;place-figure JSR2
+	BRK
+	&up-branch
+		;game/cursor-pos-h LDA
+		DUP #01 EQU ,&real-end JCN
+		#01 SUB ;game/cursor-pos-h STA
+	,&end JMP
+	&down-branch
+		;game/cursor-pos-h LDA
+		DUP #05 EQU ,&real-end JCN
+		#01 ADD ;game/cursor-pos-h STA
+	,&end JMP
+	&left-branch
+		;game/cursor-pos-w LDA
+		DUP #01 EQU ,&real-end JCN
+		#01 SUB ;game/cursor-pos-w STA
+	,&end JMP
+	&right-branch
+		;game/cursor-pos-w LDA
+		DUP #05 EQU ,&real-end JCN
+		#01 ADD ;game/cursor-pos-w STA
+	,&end JMP
+
+	&end
+		POP
+		;clear-cursors JSR2
+		;draw-player-cursor JSR2
+		,&final-end JMP
+	&real-end
+		POP2
+	&final-end
+BRK
+
+( verifie si 4 valeurs sont identiques ; retourne la valeur commune ou 0 )
+@four-same ( a b c d -- val_or_zero )
+	STH STH STH
+	STHr OVR EQU ,&f1 JCN
+	POP STHr POP STHr POP #00 JMP2r
+	&f1
+	STHr OVR EQU ,&f2 JCN
+	POP STHr POP #00 JMP2r
+	&f2
+	STHr OVR EQU ,&f3 JCN
+	POP #00 JMP2r
+	&f3
+JMP2r
+
+@board-full ( -- bool )
+	#00
+	&loop
+		DUP #18 GTH ,&full JCN
+		DUP #00 SWP ;board ADD2 LDA #00 EQU ,&empty JCN
+		INC ,&loop JMP
+	&empty POP #00 JMP2r
+	&full POP #01
+JMP2r
+
+%CHECK-WINCON {
+	DUP LIT "x EQU ;wincon-true JCN2
+	DUP LIT "o EQU ;wincon-true JCN2
+	POP
+}
+
+( 28 fenetres de 4 : 10 horiz + 10 vert + 4 diag SE + 4 diag NE )
+@wincon ( -- 00/x/o )
+	( horizontales )
+	;board/cell11 LDA ;board/cell21 LDA ;board/cell31 LDA ;board/cell41 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell21 LDA ;board/cell31 LDA ;board/cell41 LDA ;board/cell51 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell12 LDA ;board/cell22 LDA ;board/cell32 LDA ;board/cell42 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell22 LDA ;board/cell32 LDA ;board/cell42 LDA ;board/cell52 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell13 LDA ;board/cell23 LDA ;board/cell33 LDA ;board/cell43 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell23 LDA ;board/cell33 LDA ;board/cell43 LDA ;board/cell53 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell14 LDA ;board/cell24 LDA ;board/cell34 LDA ;board/cell44 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell24 LDA ;board/cell34 LDA ;board/cell44 LDA ;board/cell54 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell15 LDA ;board/cell25 LDA ;board/cell35 LDA ;board/cell45 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell25 LDA ;board/cell35 LDA ;board/cell45 LDA ;board/cell55 LDA ;four-same JSR2 CHECK-WINCON
+	( verticales )
+	;board/cell11 LDA ;board/cell12 LDA ;board/cell13 LDA ;board/cell14 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell12 LDA ;board/cell13 LDA ;board/cell14 LDA ;board/cell15 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell21 LDA ;board/cell22 LDA ;board/cell23 LDA ;board/cell24 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell22 LDA ;board/cell23 LDA ;board/cell24 LDA ;board/cell25 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell31 LDA ;board/cell32 LDA ;board/cell33 LDA ;board/cell34 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell32 LDA ;board/cell33 LDA ;board/cell34 LDA ;board/cell35 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell41 LDA ;board/cell42 LDA ;board/cell43 LDA ;board/cell44 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell42 LDA ;board/cell43 LDA ;board/cell44 LDA ;board/cell45 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell51 LDA ;board/cell52 LDA ;board/cell53 LDA ;board/cell54 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell52 LDA ;board/cell53 LDA ;board/cell54 LDA ;board/cell55 LDA ;four-same JSR2 CHECK-WINCON
+	( diagonales SE )
+	;board/cell11 LDA ;board/cell22 LDA ;board/cell33 LDA ;board/cell44 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell22 LDA ;board/cell33 LDA ;board/cell44 LDA ;board/cell55 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell21 LDA ;board/cell32 LDA ;board/cell43 LDA ;board/cell54 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell12 LDA ;board/cell23 LDA ;board/cell34 LDA ;board/cell45 LDA ;four-same JSR2 CHECK-WINCON
+	( diagonales NE )
+	;board/cell51 LDA ;board/cell42 LDA ;board/cell33 LDA ;board/cell24 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell42 LDA ;board/cell33 LDA ;board/cell24 LDA ;board/cell15 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell41 LDA ;board/cell32 LDA ;board/cell23 LDA ;board/cell14 LDA ;four-same JSR2 CHECK-WINCON
+	;board/cell52 LDA ;board/cell43 LDA ;board/cell34 LDA ;board/cell25 LDA ;four-same JSR2 CHECK-WINCON
+	#00
+@wincon-true
+JMP2r
+
+@clear-cursors ( -- )
+	#01
+	&h-loop
+		DUP #06 EQU ,&h-end JCN
+		#01
+		&w-loop
+			DUP #06 EQU ,&w-end JCN
+			OVR OVR SWP ;draw-gray-cursor JSR2
+			INC ,&w-loop JMP
+		&w-end POP
+		INC ,&h-loop JMP
+	&h-end POP
+JMP2r
+
+@draw-colored-cursor-at ( color w h -- )
+	HW-TO-BORDER-PX #0001 ADD2 .Screen/y DEO2
+	HW-TO-BORDER-PX #0001 ADD2 .Screen/x DEO2
+	#00 ( iteration )
+	&cond
+		DUP #0f EQU ,&next JCN
+	&body
+		SWP DUP DUP
+		.Screen/pixel DEO
+		.Screen/y DEI2 #000e ADD2 .Screen/y DEO2
+		.Screen/pixel DEO
+		.Screen/y DEI2 #000e SUB2 .Screen/y DEO2
+		SWP
+		#01 ADD
+		.Screen/x DEI2 #0001 ADD2 .Screen/x DEO2
+		,&cond JMP
+	&next
+	POP
+	.Screen/y DEI2 INC2 .Screen/y DEO2
+	.Screen/x DEI2 #000f SUB2 .Screen/x DEO2
+	#00
+	&cond2
+		DUP #0d EQU ,&end JCN
+	&body2
+		SWP DUP DUP
+		.Screen/pixel DEO
+		.Screen/x DEI2 #000e ADD2 .Screen/x DEO2
+		.Screen/pixel DEO
+		.Screen/x DEI2 #000e SUB2 .Screen/x DEO2
+		SWP
+		#01 ADD
+		.Screen/y DEI2 #0001 ADD2 .Screen/y DEO2
+		,&cond2 JMP
+	&end
+	POP2
+JMP2r
+
+@draw-player-cursor ( -- )
+	;game/cur-player LDA
+	LIT "o EQU ,&oBranch JCN
+		#03 ,&next JMP
+	&oBranch
+		#02
+	&next
+	;game/cursor-pos-w LDA
+	;game/cursor-pos-h LDA
+	;draw-colored-cursor-at JSR2
+JMP2r
+
+@draw-gray-cursor ( w h -- )
+	#00 ROT ROT
+	;draw-colored-cursor-at JSR2
+JMP2r
+
+( offset = (h-1)*5 + (w-1) )
+@hw-to-addr ( -- addr* )
+	;board
+	;game/cursor-pos-h LDA #01 SUB #05 MUL
+	;game/cursor-pos-w LDA #01 SUB
+	ADD #00 SWP ADD2
+JMP2r
+
+@place-figure ( -- )
+	;game/cursor-pos-h LDA HW-TO-PX-FOR-XO .Screen/y DEO2
+	;game/cursor-pos-w LDA HW-TO-PX-FOR-XO .Screen/x DEO2
+
+	;game/cur-player LDA
+	DUP LIT "x EQU ,&x-branch JCN
+	DUP LIT "o EQU ,&o-branch JCN
+	LIT "f EQU ,&fill-branch JCN
+		;sad .Screen/addr DEO2
+		#01 .Screen/sprite DEO
+		JMP2r
+	&fill-branch
+		;fill .Screen/addr DEO2
+		#00 .Screen/sprite DEO
+	JMP2r
+	&o-branch
+		POP
+		;o .Screen/addr DEO2
+		#02 .Screen/sprite DEO
+		LIT "o ;hw-to-addr JSR2 STA
+	JMP2r
+	&x-branch
+		POP
+		;x .Screen/addr DEO2
+		#03 .Screen/sprite DEO
+		LIT "x ;hw-to-addr JSR2 STA
+JMP2r
+
+@draw-vline ( -- )
+	#00
+	&vloop
+		DUP HEIGHT EQU ,&end JCN
+		INC
+		#01 .Screen/pixel DEO
+		INC-Y
+		,&vloop JMP
+	&end
+	#00 SWP
+	.Screen/y DEI2 SWP2 SUB2 .Screen/y DEO2
+JMP2r
+
+@draw-hline ( -- )
+	#00
+	&hloop
+		DUP WIDTH EQU ,&end JCN
+		INC
+		#01 .Screen/pixel DEO
+		INC-X
+		,&hloop JMP
+	&end
+	#00 SWP
+	.Screen/x DEI2 SWP2 SUB2 .Screen/x DEO2
+JMP2r
+
+( bouton restart en bas a droite : x=104 y=100 )
+@draw-restart-button
+	#0068 .Screen/x DEO2
+	#0064 .Screen/y DEO2
+	;restart-btn .Screen/addr DEO2
+	#01 .Screen/sprite DEO
+JMP2r
+
+@reset-game
+	;on-controller .Controller/vector DEO2
+	( effacer les sprites X/O et indicateur fin de partie )
+	LIT "f ;game/cur-player STA
+	#01
+	&clear-h
+		DUP #06 EQU ,&clear-h-done JCN
+		#01
+		&clear-w
+			DUP #06 EQU ,&clear-w-done JCN
+			OVR ;game/cursor-pos-h STA
+			DUP ;game/cursor-pos-w STA
+			;place-figure JSR2
+			INC ,&clear-w JMP
+		&clear-w-done POP
+		INC ,&clear-h JMP
+	&clear-h-done POP
+	( effacer indicateur gagnant/egalite h=6 w=3 )
+	#06 ;game/cursor-pos-h STA
+	#03 ;game/cursor-pos-w STA
+	;place-figure JSR2
+	( reinitialiser les donnees )
+	LIT "x ;game/cur-player STA
+	#0303 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+	#00
+	&zero-loop
+		DUP #18 GTH ,&zero-done JCN
+		#00 OVR #00 SWP ;board ADD2 STA
+		INC ,&zero-loop JMP
+	&zero-done POP
+	;clear-cursors JSR2
+	;draw-player-cursor JSR2
+	;draw-restart-button JSR2
+JMP2r
+
+@on-mouse
+	( === 1. curseur souris FG === )
+	#00 ;ptr-px LDA .Screen/x DEO2
+	#00 ;ptr-py LDA .Screen/y DEO2
+	;fill .Screen/addr DEO2 #40 .Screen/sprite DEO
+	.Mouse/x DEI2 NIP DUP ;ptr-px STA #00 SWP .Screen/x DEO2
+	.Mouse/y DEI2 NIP DUP ;ptr-py STA #00 SWP .Screen/y DEO2
+	;mouse-cursor .Screen/addr DEO2 #43 .Screen/sprite DEO
+	( === 2. detection front montant === )
+	.Mouse/state DEI #01 AND
+	;mouse-last-state LDA
+	OVR ;mouse-last-state STA
+	EQU ;&done JCN2
+	;mouse-last-state LDA #00 EQU ;&done JCN2
+	( === 3. bouton restart : actif en permanence === )
+	( zone x=[104..111]=0x68..0x6f  y=[100..107]=0x64..0x6b )
+	.Mouse/x DEI2 NIP
+	DUP #68 LTH ,&not-rbtn JCN
+	DUP #6f GTH ,&not-rbtn JCN
+	POP
+	.Mouse/y DEI2 NIP
+	DUP #64 LTH ,&not-rbtny JCN
+	DUP #6b GTH ,&not-rbtny JCN
+	POP
+	;reset-game JSR2 ;&done JMP2
+	&not-rbtn POP ;&skip-rbtn JMP2
+	&not-rbtny POP ;&skip-rbtn JMP2
+	&skip-rbtn
+	( === 4. logique jeu seulement si partie en cours === )
+	.Controller/vector DEI2 ;on-controller NEQ2 ;&done JCN2
+	( convertir x -> w )
+	.Mouse/x DEI2 NIP
+	DUP #10 LTH ,&outside JCN
+	DUP #5f GTH ,&outside JCN
+	#10 SUB #10 DIV INC ;mouse-cell-w STA
+	( convertir y -> h )
+	.Mouse/y DEI2 NIP
+	DUP #10 LTH ,&outside JCN
+	DUP #5f GTH ,&outside JCN
+	#10 SUB #10 DIV INC ;mouse-cell-h STA
+	( mise a jour curseur si necessaire )
+	#01 ;mouse-over-board STA
+	;mouse-cell-w LDA ;game/cursor-pos-w LDA NEQ
+	;mouse-cell-h LDA ;game/cursor-pos-h LDA NEQ ORA
+	,&hover-update JCN
+	,&hover-done JMP
+	&outside POP #00 ;mouse-over-board STA ,&hover-done JMP
+	&hover-update
+		;mouse-cell-w LDA ;game/cursor-pos-w STA
+		;mouse-cell-h LDA ;game/cursor-pos-h STA
+		;clear-cursors JSR2
+		;draw-player-cursor JSR2
+	&hover-done
+	( poser la piece sur clic )
+	;mouse-over-board LDA #00 EQU ;&done JCN2
+	;hw-to-addr JSR2 LDA ;&done JCN2
+	;place-figure JSR2
+	;wincon JSR2 DUP #00 EQU ,&no-x-win JCN
+	;off-controller .Controller/vector DEO2
+	#0603 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+	;place-figure JSR2
+	BRK
+	&no-x-win
+		POP
+		;board-full JSR2 ,&tie JCN
+		;ai-move JSR2
+		;wincon JSR2 DUP #00 EQU ,&no-o-win JCN
+		;off-controller .Controller/vector DEO2
+		#0603 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+		;place-figure JSR2
+		BRK
+		&no-o-win
+			POP
+			;board-full JSR2 ,&tie JCN
+			LIT "x ;game/cur-player STA
+			;clear-cursors JSR2
+			;draw-player-cursor JSR2
+			BRK
+	&tie
+		;off-controller .Controller/vector DEO2
+		#0603 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+		LIT "s ;game/cur-player STA
+		;place-figure JSR2
+	&done
+BRK
+
+( === IA === )
+
+( verifie les indices i1/i2/i3 == target et ie == vide )
+@ai-check-perm4 ( -- found? )
+	;board ;ai-i1 LDA #00 SWP ADD2 LDA ;ai-target LDA NEQ ,&no JCN
+	;board ;ai-i2 LDA #00 SWP ADD2 LDA ;ai-target LDA NEQ ,&no JCN
+	;board ;ai-i3 LDA #00 SWP ADD2 LDA ;ai-target LDA NEQ ,&no JCN
+	;board ;ai-ie LDA #00 SWP ADD2 LDA #00 NEQ ,&no JCN
+	;ai-he LDA ;ai-move-h STA
+	;ai-we LDA ;ai-move-w STA
+	#01 JMP2r
+	&no
+	#00
+JMP2r
+
+( prepare les parametres et appelle ai-check-perm4 ; ignore si ai-found=1 )
+@ai-set-and-check4 ( i1 i2 i3 ie he we -- )
+	;ai-found LDA ,&skip JCN
+	;ai-we STA
+	;ai-he STA
+	;ai-ie STA
+	;ai-i3 STA
+	;ai-i2 STA
+	;ai-i1 STA
+	;ai-check-perm4 JSR2 ;ai-found STA
+	JMP2r
+	&skip POP2 POP2 POP2
+JMP2r
+
+( scan les 28 fenetres de 4 avec 4 permutations chacune )
+@ai-scan-for ( target -- )
+	;ai-target STA
+	( horizontales H=1 )
+	#00 #01 #02 #03 #01 #04 ;ai-set-and-check4 JSR2
+	#00 #01 #03 #02 #01 #03 ;ai-set-and-check4 JSR2
+	#00 #02 #03 #01 #01 #02 ;ai-set-and-check4 JSR2
+	#01 #02 #03 #00 #01 #01 ;ai-set-and-check4 JSR2
+	#01 #02 #03 #04 #01 #05 ;ai-set-and-check4 JSR2
+	#01 #02 #04 #03 #01 #04 ;ai-set-and-check4 JSR2
+	#01 #03 #04 #02 #01 #03 ;ai-set-and-check4 JSR2
+	#02 #03 #04 #01 #01 #02 ;ai-set-and-check4 JSR2
+	( horizontales H=2 )
+	#05 #06 #07 #08 #02 #04 ;ai-set-and-check4 JSR2
+	#05 #06 #08 #07 #02 #03 ;ai-set-and-check4 JSR2
+	#05 #07 #08 #06 #02 #02 ;ai-set-and-check4 JSR2
+	#06 #07 #08 #05 #02 #01 ;ai-set-and-check4 JSR2
+	#06 #07 #08 #09 #02 #05 ;ai-set-and-check4 JSR2
+	#06 #07 #09 #08 #02 #04 ;ai-set-and-check4 JSR2
+	#06 #08 #09 #07 #02 #03 ;ai-set-and-check4 JSR2
+	#07 #08 #09 #06 #02 #02 ;ai-set-and-check4 JSR2
+	( horizontales H=3 )
+	#0a #0b #0c #0d #03 #04 ;ai-set-and-check4 JSR2
+	#0a #0b #0d #0c #03 #03 ;ai-set-and-check4 JSR2
+	#0a #0c #0d #0b #03 #02 ;ai-set-and-check4 JSR2
+	#0b #0c #0d #0a #03 #01 ;ai-set-and-check4 JSR2
+	#0b #0c #0d #0e #03 #05 ;ai-set-and-check4 JSR2
+	#0b #0c #0e #0d #03 #04 ;ai-set-and-check4 JSR2
+	#0b #0d #0e #0c #03 #03 ;ai-set-and-check4 JSR2
+	#0c #0d #0e #0b #03 #02 ;ai-set-and-check4 JSR2
+	( horizontales H=4 )
+	#0f #10 #11 #12 #04 #04 ;ai-set-and-check4 JSR2
+	#0f #10 #12 #11 #04 #03 ;ai-set-and-check4 JSR2
+	#0f #11 #12 #10 #04 #02 ;ai-set-and-check4 JSR2
+	#10 #11 #12 #0f #04 #01 ;ai-set-and-check4 JSR2
+	#10 #11 #12 #13 #04 #05 ;ai-set-and-check4 JSR2
+	#10 #11 #13 #12 #04 #04 ;ai-set-and-check4 JSR2
+	#10 #12 #13 #11 #04 #03 ;ai-set-and-check4 JSR2
+	#11 #12 #13 #10 #04 #02 ;ai-set-and-check4 JSR2
+	( horizontales H=5 )
+	#14 #15 #16 #17 #05 #04 ;ai-set-and-check4 JSR2
+	#14 #15 #17 #16 #05 #03 ;ai-set-and-check4 JSR2
+	#14 #16 #17 #15 #05 #02 ;ai-set-and-check4 JSR2
+	#15 #16 #17 #14 #05 #01 ;ai-set-and-check4 JSR2
+	#15 #16 #17 #18 #05 #05 ;ai-set-and-check4 JSR2
+	#15 #16 #18 #17 #05 #04 ;ai-set-and-check4 JSR2
+	#15 #17 #18 #16 #05 #03 ;ai-set-and-check4 JSR2
+	#16 #17 #18 #15 #05 #02 ;ai-set-and-check4 JSR2
+	( verticales W=1 )
+	#00 #05 #0a #0f #04 #01 ;ai-set-and-check4 JSR2
+	#00 #05 #0f #0a #03 #01 ;ai-set-and-check4 JSR2
+	#00 #0a #0f #05 #02 #01 ;ai-set-and-check4 JSR2
+	#05 #0a #0f #00 #01 #01 ;ai-set-and-check4 JSR2
+	#05 #0a #0f #14 #05 #01 ;ai-set-and-check4 JSR2
+	#05 #0a #14 #0f #04 #01 ;ai-set-and-check4 JSR2
+	#05 #0f #14 #0a #03 #01 ;ai-set-and-check4 JSR2
+	#0a #0f #14 #05 #02 #01 ;ai-set-and-check4 JSR2
+	( verticales W=2 )
+	#01 #06 #0b #10 #04 #02 ;ai-set-and-check4 JSR2
+	#01 #06 #10 #0b #03 #02 ;ai-set-and-check4 JSR2
+	#01 #0b #10 #06 #02 #02 ;ai-set-and-check4 JSR2
+	#06 #0b #10 #01 #01 #02 ;ai-set-and-check4 JSR2
+	#06 #0b #10 #15 #05 #02 ;ai-set-and-check4 JSR2
+	#06 #0b #15 #10 #04 #02 ;ai-set-and-check4 JSR2
+	#06 #10 #15 #0b #03 #02 ;ai-set-and-check4 JSR2
+	#0b #10 #15 #06 #02 #02 ;ai-set-and-check4 JSR2
+	( verticales W=3 )
+	#02 #07 #0c #11 #04 #03 ;ai-set-and-check4 JSR2
+	#02 #07 #11 #0c #03 #03 ;ai-set-and-check4 JSR2
+	#02 #0c #11 #07 #02 #03 ;ai-set-and-check4 JSR2
+	#07 #0c #11 #02 #01 #03 ;ai-set-and-check4 JSR2
+	#07 #0c #11 #16 #05 #03 ;ai-set-and-check4 JSR2
+	#07 #0c #16 #11 #04 #03 ;ai-set-and-check4 JSR2
+	#07 #11 #16 #0c #03 #03 ;ai-set-and-check4 JSR2
+	#0c #11 #16 #07 #02 #03 ;ai-set-and-check4 JSR2
+	( verticales W=4 )
+	#03 #08 #0d #12 #04 #04 ;ai-set-and-check4 JSR2
+	#03 #08 #12 #0d #03 #04 ;ai-set-and-check4 JSR2
+	#03 #0d #12 #08 #02 #04 ;ai-set-and-check4 JSR2
+	#08 #0d #12 #03 #01 #04 ;ai-set-and-check4 JSR2
+	#08 #0d #12 #17 #05 #04 ;ai-set-and-check4 JSR2
+	#08 #0d #17 #12 #04 #04 ;ai-set-and-check4 JSR2
+	#08 #12 #17 #0d #03 #04 ;ai-set-and-check4 JSR2
+	#0d #12 #17 #08 #02 #04 ;ai-set-and-check4 JSR2
+	( verticales W=5 )
+	#04 #09 #0e #13 #04 #05 ;ai-set-and-check4 JSR2
+	#04 #09 #13 #0e #03 #05 ;ai-set-and-check4 JSR2
+	#04 #0e #13 #09 #02 #05 ;ai-set-and-check4 JSR2
+	#09 #0e #13 #04 #01 #05 ;ai-set-and-check4 JSR2
+	#09 #0e #13 #18 #05 #05 ;ai-set-and-check4 JSR2
+	#09 #0e #18 #13 #04 #05 ;ai-set-and-check4 JSR2
+	#09 #13 #18 #0e #03 #05 ;ai-set-and-check4 JSR2
+	#0e #13 #18 #09 #02 #05 ;ai-set-and-check4 JSR2
+	( diagonales SE )
+	#00 #06 #0c #12 #04 #04 ;ai-set-and-check4 JSR2
+	#00 #06 #12 #0c #03 #03 ;ai-set-and-check4 JSR2
+	#00 #0c #12 #06 #02 #02 ;ai-set-and-check4 JSR2
+	#06 #0c #12 #00 #01 #01 ;ai-set-and-check4 JSR2
+	#06 #0c #12 #18 #05 #05 ;ai-set-and-check4 JSR2
+	#06 #0c #18 #12 #04 #04 ;ai-set-and-check4 JSR2
+	#06 #12 #18 #0c #03 #03 ;ai-set-and-check4 JSR2
+	#0c #12 #18 #06 #02 #02 ;ai-set-and-check4 JSR2
+	#01 #07 #0d #13 #04 #05 ;ai-set-and-check4 JSR2
+	#01 #07 #13 #0d #03 #04 ;ai-set-and-check4 JSR2
+	#01 #0d #13 #07 #02 #03 ;ai-set-and-check4 JSR2
+	#07 #0d #13 #01 #01 #02 ;ai-set-and-check4 JSR2
+	#05 #0b #11 #17 #05 #04 ;ai-set-and-check4 JSR2
+	#05 #0b #17 #11 #04 #03 ;ai-set-and-check4 JSR2
+	#05 #11 #17 #0b #03 #02 ;ai-set-and-check4 JSR2
+	#0b #11 #17 #05 #02 #01 ;ai-set-and-check4 JSR2
+	( diagonales NE )
+	#04 #08 #0c #10 #04 #02 ;ai-set-and-check4 JSR2
+	#04 #08 #10 #0c #03 #03 ;ai-set-and-check4 JSR2
+	#04 #0c #10 #08 #02 #04 ;ai-set-and-check4 JSR2
+	#08 #0c #10 #04 #01 #05 ;ai-set-and-check4 JSR2
+	#08 #0c #10 #14 #05 #01 ;ai-set-and-check4 JSR2
+	#08 #0c #14 #10 #04 #02 ;ai-set-and-check4 JSR2
+	#08 #10 #14 #0c #03 #03 ;ai-set-and-check4 JSR2
+	#0c #10 #14 #08 #02 #04 ;ai-set-and-check4 JSR2
+	#03 #07 #0b #0f #04 #01 ;ai-set-and-check4 JSR2
+	#03 #07 #0f #0b #03 #02 ;ai-set-and-check4 JSR2
+	#03 #0b #0f #07 #02 #03 ;ai-set-and-check4 JSR2
+	#07 #0b #0f #03 #01 #04 ;ai-set-and-check4 JSR2
+	#09 #0d #11 #15 #05 #02 ;ai-set-and-check4 JSR2
+	#09 #0d #15 #11 #04 #03 ;ai-set-and-check4 JSR2
+	#09 #11 #15 #0d #03 #04 ;ai-set-and-check4 JSR2
+	#0d #11 #15 #09 #02 #05 ;ai-set-and-check4 JSR2
+JMP2r
+
+( premiere case vide )
+@ai-any-empty ( -- )
+	#00
+	&loop
+		DUP #18 GTH ,&done JCN
+		DUP #00 SWP ;board ADD2 LDA #00 EQU ,&found JCN
+		INC ,&loop JMP
+	&found
+		DUP #05 DIV INC ;ai-move-h STA
+		DUP #05 DIV #05 MUL SUB INC ;ai-move-w STA
+		JMP2r
+	&done POP
+JMP2r
+
+( strategie IA : 1-gagner 2-bloquer 3-centre 4-coin 5-case vide )
+@ai-move ( -- )
+	;game/cursor-pos-h LDA ;ai-save-h STA
+	;game/cursor-pos-w LDA ;ai-save-w STA
+	#00 ;ai-found STA
+	LIT "o ;ai-scan-for JSR2
+	;ai-found LDA ;&do-place JCN2
+	LIT "x ;ai-scan-for JSR2
+	;ai-found LDA ;&do-place JCN2
+	;board/cell33 LDA #00 NEQ ,&nc JCN
+	#03 ;ai-move-h STA #03 ;ai-move-w STA ;&do-place JMP2
+	&nc
+	;board/cell11 LDA #00 NEQ ,&nc11 JCN
+	#01 ;ai-move-h STA #01 ;ai-move-w STA ;&do-place JMP2
+	&nc11
+	;board/cell51 LDA #00 NEQ ,&nc51 JCN
+	#01 ;ai-move-h STA #05 ;ai-move-w STA ;&do-place JMP2
+	&nc51
+	;board/cell15 LDA #00 NEQ ,&nc15 JCN
+	#05 ;ai-move-h STA #01 ;ai-move-w STA ;&do-place JMP2
+	&nc15
+	;board/cell55 LDA #00 NEQ ,&nc55 JCN
+	#05 ;ai-move-h STA #05 ;ai-move-w STA ;&do-place JMP2
+	&nc55
+	;ai-any-empty JSR2
+	&do-place
+	;ai-move-h LDA ;game/cursor-pos-h STA
+	;ai-move-w LDA ;game/cursor-pos-w STA
+	LIT "o ;game/cur-player STA
+	;place-figure JSR2
+	;ai-save-h LDA ;game/cursor-pos-h STA
+	;ai-save-w LDA ;game/cursor-pos-w STA
+JMP2r
+
+( === VARIABLES === )
+@game [
+	&x-score 00 &o-score 00
+	&cur-player "x
+	&cursor-pos-w 03 &cursor-pos-h 03
+]
+@board [
+	&cell11 00 &cell21 00 &cell31 00 &cell41 00 &cell51 00
+	&cell12 00 &cell22 00 &cell32 00 &cell42 00 &cell52 00
+	&cell13 00 &cell23 00 &cell33 00 &cell43 00 &cell53 00
+	&cell14 00 &cell24 00 &cell34 00 &cell44 00 &cell54 00
+	&cell15 00 &cell25 00 &cell35 00 &cell45 00 &cell55 00
+]
+@ai-target 00
+@ai-i1 00 @ai-i2 00 @ai-i3 00 @ai-ie 00 @ai-he 00 @ai-we 00
+@ai-move-h 00 @ai-move-w 00
+@ai-found 00
+@ai-save-h 00 @ai-save-w 00
+@mouse-last-state 00
+@mouse-cell-w 00 @mouse-cell-h 00
+@mouse-over-board 00
+@ptr-px 00 @ptr-py 00
+
+(
+SPRITES BE HERE
+# . . . . . # . | 82    . . # # # . . . | 38    . # . . . # . . | 44
+. # . . . # . . | 44    . # . . . # . . | 44    . # . . . # . . | 44
+. . # . # . . . | 28    # . . . . . # . | 82    . # . . . # . . | 44
+. . . # . . . . | 10    # . . . . . # . | 82    . . . . . . . . | 00
+. . # . # . . . | 28    # . . . . . # . | 82    . # # # # # . . | 7c
+. # . . . # . . | 44    . # . . . # . . | 44    # . . . . . # . | 82
+# . . . . . # . | 82    . . # # # . . . | 38    # . . . . . # . | 82
+. . . . . . . . | 00    . . . . . . . . | 00    . . . . . . . . | 00
+)
+@x        8244 2810 2844 8200
+@o        3844 8282 8244 3800
+@sad      4444 4400 7c82 8200
+@fill     ffff ffff ffff ffff
+@restart-btn f088 88f0 c0a0 9000
+@mouse-cursor 80c0 e0f0 f8e0 a020

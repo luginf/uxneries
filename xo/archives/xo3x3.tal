@@ -383,19 +383,6 @@ JMP2r
 ( remet a zero l'etat du jeu et redessine )
 @reset-game
 	;on-controller .Controller/vector DEO2
-	( effacer les sprites X/O et indicateur fin de partie )
-	LIT "f ;game/cur-player STA
-	#0101 ;game/cursor-pos-w STA ;game/cursor-pos-h STA ;place-figure JSR2
-	#0102 ;game/cursor-pos-w STA ;game/cursor-pos-h STA ;place-figure JSR2
-	#0103 ;game/cursor-pos-w STA ;game/cursor-pos-h STA ;place-figure JSR2
-	#0201 ;game/cursor-pos-w STA ;game/cursor-pos-h STA ;place-figure JSR2
-	#0202 ;game/cursor-pos-w STA ;game/cursor-pos-h STA ;place-figure JSR2
-	#0203 ;game/cursor-pos-w STA ;game/cursor-pos-h STA ;place-figure JSR2
-	#0301 ;game/cursor-pos-w STA ;game/cursor-pos-h STA ;place-figure JSR2
-	#0302 ;game/cursor-pos-w STA ;game/cursor-pos-h STA ;place-figure JSR2
-	#0303 ;game/cursor-pos-w STA ;game/cursor-pos-h STA ;place-figure JSR2
-	#0402 ;game/cursor-pos-w STA ;game/cursor-pos-h STA ;place-figure JSR2
-	( reinitialiser les donnees )
 	LIT "x ;game/cur-player STA
 	#0202 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
 	#0000 #0000 #0000 #0000 #00
@@ -404,6 +391,7 @@ JMP2r
 	;board/cell31 STA ;board/cell32 STA ;board/cell33 STA
 	;clear-cursors JSR2
 	;draw-player-cursor JSR2
+	#8244 ;x STA2
 	;draw-restart-button JSR2
 JMP2r
 
