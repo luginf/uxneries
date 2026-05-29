@@ -2,7 +2,6 @@
 |10 @Console [ &vector $2 &read $1 &pad $5 &write $1 &error $1 ]
 |20 @Screen [ &vector $2 &width $2 &height $2 &pad $2 &x $2 &y $2 &addr $2 &pixel $1 &sprite ]
 |80 @Controller [ &vector $2 &button $1 &key $1 ]
-|90 @Mouse [ &vector $2 &x $2 &y $2 &state $1 &pad $7 ]
 
 %INCREMENT { DUP DEI2 #000c ADD2 ROT DEO2 }
 %INC-X { .Screen/x DEI2 INC2 .Screen/x DEO2 }
@@ -53,10 +52,8 @@
 	#01 .Screen/pixel DEO
 
 	;draw-player-cursor JSR2
-	;draw-restart-button JSR2
 
 	;on-controller .Controller/vector DEO2
-	;on-mouse .Mouse/vector DEO2
 BRK
 
 @off-controller ( a nice little pun )
@@ -82,7 +79,16 @@ BRK
 	#0402 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
 	;place-figure JSR2
 
-	;reset-game JSR2
+	;on-controller .Controller/vector DEO2
+	LIT "x ;game/cur-player STA
+	#0202 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
+	#0000 #0000 #0000 #0000 #00
+	;board/cell11 STA ;board/cell12 STA ;board/cell13 STA
+	;board/cell21 STA ;board/cell22 STA ;board/cell23 STA
+	;board/cell31 STA ;board/cell32 STA ;board/cell33 STA
+	;clear-cursors JSR2
+	;draw-player-cursor JSR2
+	#8244 ;x STA2 ( When someone wins, x's sprite gets overwritten due to place-figure being too universal (should be split in two). Instead of having a proper refactoring, I am just making this dirty hack. I am not sorry. )
 BRK
 
 @on-controller
@@ -372,120 +378,6 @@ JMP2r
 	.Screen/x DEI2 SWP2 SUB2 .Screen/x DEO2
 JMP2r
 
-( dessine le bouton restart "R" en bas a droite : x=82 y=94 )
-@draw-restart-button
-	#0052 .Screen/x DEO2
-	#005e .Screen/y DEO2
-	;restart-btn .Screen/addr DEO2
-	#01 .Screen/sprite DEO
-JMP2r
-
-( remet a zero l'etat du jeu et redessine )
-@reset-game
-	;on-controller .Controller/vector DEO2
-	LIT "x ;game/cur-player STA
-	#0202 ;game/cursor-pos-w STA ;game/cursor-pos-h STA
-	#0000 #0000 #0000 #0000 #00
-	;board/cell11 STA ;board/cell12 STA ;board/cell13 STA
-	;board/cell21 STA ;board/cell22 STA ;board/cell23 STA
-	;board/cell31 STA ;board/cell32 STA ;board/cell33 STA
-	;clear-cursors JSR2
-	;draw-player-cursor JSR2
-	#8244 ;x STA2
-	;draw-restart-button JSR2
-JMP2r
-
-@on-mouse
-	( === 1. curseur souris sur couche avant (FG, bit6=1) === )
-	( effacer ancien : sprite fill tout-a-1 avec couleur-0 FG = transparent )
-	#00 ;ptr-px LDA .Screen/x DEO2
-	#00 ;ptr-py LDA .Screen/y DEO2
-	;fill .Screen/addr DEO2 #40 .Screen/sprite DEO
-	( dessiner nouveau a la position exacte de la souris )
-	.Mouse/x DEI2 NIP DUP ;ptr-px STA #00 SWP .Screen/x DEO2
-	.Mouse/y DEI2 NIP DUP ;ptr-py STA #00 SWP .Screen/y DEO2
-	;mouse-cursor .Screen/addr DEO2 #43 .Screen/sprite DEO
-	( === 2. detection appui gauche (front montant) === )
-	.Mouse/state DEI #01 AND
-	;mouse-last-state LDA
-	OVR ;mouse-last-state STA
-	EQU ;&done JCN2
-	;mouse-last-state LDA #00 EQU ;&done JCN2
-	( === 3. bouton restart : actif en permanence === )
-	( zone x=[82..89]=0x52..0x59  y=[94..101]=0x5e..0x65 )
-	.Mouse/x DEI2 NIP
-	DUP #52 LTH ,&not-rbtn JCN
-	DUP #59 GTH ,&not-rbtn JCN
-	POP
-	.Mouse/y DEI2 NIP
-	DUP #5e LTH ,&not-rbtny JCN
-	DUP #65 GTH ,&not-rbtny JCN
-	POP
-	;reset-game JSR2 ;&done JMP2
-	&not-rbtn POP ;&skip-rbtn JMP2
-	&not-rbtny POP ;&skip-rbtn JMP2
-	&skip-rbtn
-	( === 4. logique de jeu : seulement si partie en cours === )
-	.Controller/vector DEI2 ;on-controller NEQ2 ;&done JCN2
-	( convertir x -> w )
-	.Mouse/x DEI2 NIP
-	DUP #1d LTH ,&outside JCN
-	DUP #4c GTH ,&outside JCN
-	#1d SUB #10 DIV INC ;mouse-cell-w STA
-	( convertir y -> h )
-	.Mouse/y DEI2 NIP
-	DUP #1d LTH ,&outside JCN
-	DUP #4c GTH ,&outside JCN
-	#1d SUB #10 DIV INC ;mouse-cell-h STA
-	( mettre a jour le curseur de cellule si necessaire )
-	#01 ;mouse-over-board STA
-	;mouse-cell-w LDA ;game/cursor-pos-w LDA NEQ
-	;mouse-cell-h LDA ;game/cursor-pos-h LDA NEQ ORA
-	,&hover-update JCN
-	,&hover-done JMP
-	&outside POP #00 ;mouse-over-board STA ,&hover-done JMP
-	&hover-update
-		;mouse-cell-w LDA ;game/cursor-pos-w STA
-		;mouse-cell-h LDA ;game/cursor-pos-h STA
-		;clear-cursors JSR2
-		;draw-player-cursor JSR2
-	&hover-done
-	( poser la piece sur clic dans la grille )
-	;mouse-over-board LDA #00 EQU ;&done JCN2
-	;hw-to-addr JSR2 LDA ;&done JCN2
-	;place-figure JSR2
-	;wincon JSR2 DUP #00 EQU ,&no-x-win JCN
-	;off-controller .Controller/vector DEO2
-	#04 ;game/cursor-pos-h STA
-	#02 ;game/cursor-pos-w STA
-	;place-figure JSR2
-	BRK
-	&no-x-win
-		POP
-		;board-full JSR2 ,&tie JCN
-		;ai-move JSR2
-		;wincon JSR2 DUP #00 EQU ,&no-o-win JCN
-		;off-controller .Controller/vector DEO2
-		#04 ;game/cursor-pos-h STA
-		#02 ;game/cursor-pos-w STA
-		;place-figure JSR2
-		BRK
-		&no-o-win
-			POP
-			;board-full JSR2 ,&tie JCN
-			LIT "x ;game/cur-player STA
-			;clear-cursors JSR2
-			;draw-player-cursor JSR2
-			BRK
-	&tie
-		;off-controller .Controller/vector DEO2
-		#04 ;game/cursor-pos-h STA
-		#02 ;game/cursor-pos-w STA
-		LIT "s ;game/cur-player STA
-		;place-figure JSR2
-	&done
-BRK
-
 ( ai: verifie si les cellules aux indices i1 et i2 contiennent ai-target et que ie est vide )
 ( retourne 1 si trouvé et stocke la position dans ai-move-h/w )
 @ai-check-perm ( -- found? )
@@ -613,10 +505,6 @@ JMP2r
 @ai-move-h 00 @ai-move-w 00
 @ai-found 00
 @ai-save-h 00 @ai-save-w 00
-@mouse-last-state 00
-@mouse-cell-w 00 @mouse-cell-h 00
-@mouse-over-board 00
-@ptr-px 00 @ptr-py 00
 
 (
 SPRITES BE HERE
@@ -634,6 +522,4 @@ SPRITES BE HERE
 @sad      4444 4400 7c82 8200
 @sad-old  2828 2800 3844 4400
 @fill     ffff ffff ffff ffff
-@restart-btn f088 88f0 c0a0 9000
-@mouse-cursor 80c0 e0f0 f8e0 a020
 
